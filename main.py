@@ -401,26 +401,28 @@ class BulkRenamerApp:
             temp_names = []
             dupe_counters = defaultdict(int)
             renamed_files = {}  # 用于跟踪已重命名的临时文件，避免冲突
+            group_reps = defaultdict(bool)  # 每个组是否已选择代表
             for old_name in files:
                 key = old_to_key[old_name]
                 md5_hash, ext = key
                 base_temp = f"{md5_hash}{ext}"
-                if md5_ext_counts[key] == 1:
+                if md5_ext_counts[key] == 1 or not group_reps[key]:
                     temp_name = base_temp
-                    while temp_name in renamed_files:  # 检查是否已存在相同临时名称
+                    group_reps[key] = True
+                    while temp_name in renamed_files:
                         dupe_counters[key] += 1
                         temp_name = f"{dupe_counters[key]}-{base_temp}"
                     temp_names.append(temp_name)
                 else:
                     dupe_counters[key] += 1
                     temp_name = f"{dupe_counters[key]}-{base_temp}"
-                    while temp_name in renamed_files:  # 检查是否已存在相同临时名称
+                    while temp_name in renamed_files:
                         dupe_counters[key] += 1
                         temp_name = f"{dupe_counters[key]}-{base_temp}"
                 os.rename(os.path.join(folder_path, old_name), os.path.join(folder_path, temp_name))
                 renamed_files[temp_name] = True
 
-            # 对唯一文件进行最终重命名
+            # 对选定的文件进行最终重命名
             for i, temp_name in enumerate(temp_names):
                 ext = os.path.splitext(temp_name)[1]
                 name_parts = []
@@ -436,7 +438,7 @@ class BulkRenamerApp:
             total_files = len(files)
             renamed_files_count = len(temp_names)
             dupe_files = total_files - renamed_files_count
-            messagebox.showinfo("成功", f"重命名了 {renamed_files_count} 个独特文件。{dupe_files} 个重复文件保持临时命名。")
+            messagebox.showinfo("成功", f"重命名了 {renamed_files_count} 个文件（包括重复组的第一个）。{dupe_files} 个后续重复文件保持临时命名。")
             self.continue_button.config(state=tk.NORMAL)
         except Exception as e:
             messagebox.showerror("错误", str(e))
