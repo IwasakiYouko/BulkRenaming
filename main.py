@@ -5,6 +5,7 @@ import hashlib
 import string
 from datetime import datetime, timedelta
 from tkinter import scrolledtext
+from collections import defaultdict
 
 class BulkRenamerApp:
     def __init__(self, master):
@@ -20,12 +21,12 @@ class BulkRenamerApp:
         self.style.configure("TFrame", background="#f0f0f0")
 
         self.folder_path = tk.StringVar()
-        self.parts = []  # List of parts: ('constant', value) or ('variable', var_type, params)
+        self.parts = []  # 部分列表：('constant', value) 或 ('variable', var_type, params)
 
         self.create_widgets()
 
     def create_widgets(self):
-        # Folder selection
+        # 文件夹选择
         folder_frame = ttk.Frame(self.master, padding=10)
         folder_frame.pack(fill=tk.X)
 
@@ -33,7 +34,7 @@ class BulkRenamerApp:
         ttk.Entry(folder_frame, textvariable=self.folder_path, width=50).pack(side=tk.LEFT, padx=5)
         ttk.Button(folder_frame, text="浏览", command=self.browse_folder).pack(side=tk.LEFT, padx=5)
 
-        # Parts list
+        # 部分列表
         self.parts_frame = ttk.Frame(self.master, padding=10)
         self.parts_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -42,7 +43,7 @@ class BulkRenamerApp:
         self.parts_listbox = tk.Listbox(self.parts_frame, height=10, font=("Arial", 10))
         self.parts_listbox.pack(fill=tk.BOTH, expand=True, pady=5)
 
-        # Buttons for adding parts
+        # 添加部分的按钮
         buttons_frame = ttk.Frame(self.parts_frame)
         buttons_frame.pack(fill=tk.X)
 
@@ -50,10 +51,10 @@ class BulkRenamerApp:
         ttk.Button(buttons_frame, text="添加变量", command=self.add_variable).pack(side=tk.LEFT, padx=5)
         ttk.Button(buttons_frame, text="移除最后部分", command=self.remove_last_part).pack(side=tk.LEFT, padx=5)
 
-        # Rename button
+        # 重命名按钮
         ttk.Button(self.master, text="重命名文件", command=self.perform_rename).pack(pady=10)
 
-        # Continue button for multiple folders
+        # 用于多个文件夹的继续按钮
         self.continue_button = ttk.Button(self.master, text="重命名另一个文件夹", command=self.reset_for_next, state=tk.DISABLED)
         self.continue_button.pack(pady=5)
 
@@ -333,7 +334,7 @@ class BulkRenamerApp:
                 else:
                     messagebox.showerror("错误", "列表不能为空", parent=params_window)
 
-        # Save button
+        # 保存按钮
         ttk.Button(params_window, text="保存", command=save_params).pack(pady=10)
 
         params_window.protocol("WM_DELETE_WINDOW", lambda: params_window.quit())
@@ -383,18 +384,43 @@ class BulkRenamerApp:
         try:
             files = sorted([f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))])
 
-            # Temporary rename
-            temp_names = []
+            # 第一遍：计算每个文件的MD5和扩展名，并统计出现次数
+            old_to_key = {}
+            md5_ext_counts = defaultdict(int)
             for old_name in files:
                 file_path = os.path.join(folder_path, old_name)
                 with open(file_path, 'rb') as f:
-                    md5_hash = hashlib.md5(f.read()).hexdigest()[:16]
+                    content = f.read()
+                    md5_hash = hashlib.md5(content).hexdigest()[:16]
                 ext = os.path.splitext(old_name)[1]
-                temp_name = f"{md5_hash}{ext}"
-                os.rename(file_path, os.path.join(folder_path, temp_name))
-                temp_names.append(temp_name)
+                key = (md5_hash, ext)
+                old_to_key[old_name] = key
+                md5_ext_counts[key] += 1
 
-            # Final rename
+            # 第二遍：临时重命名
+            temp_names = []
+            dupe_counters = defaultdict(int)
+            renamed_files = {}  # 用于跟踪已重命名的临时文件，避免冲突
+            for old_name in files:
+                key = old_to_key[old_name]
+                md5_hash, ext = key
+                base_temp = f"{md5_hash}{ext}"
+                if md5_ext_counts[key] == 1:
+                    temp_name = base_temp
+                    while temp_name in renamed_files:  # 检查是否已存在相同临时名称
+                        dupe_counters[key] += 1
+                        temp_name = f"{dupe_counters[key]}-{base_temp}"
+                    temp_names.append(temp_name)
+                else:
+                    dupe_counters[key] += 1
+                    temp_name = f"{dupe_counters[key]}-{base_temp}"
+                    while temp_name in renamed_files:  # 检查是否已存在相同临时名称
+                        dupe_counters[key] += 1
+                        temp_name = f"{dupe_counters[key]}-{base_temp}"
+                os.rename(os.path.join(folder_path, old_name), os.path.join(folder_path, temp_name))
+                renamed_files[temp_name] = True
+
+            # 对唯一文件进行最终重命名
             for i, temp_name in enumerate(temp_names):
                 ext = os.path.splitext(temp_name)[1]
                 name_parts = []
@@ -407,7 +433,10 @@ class BulkRenamerApp:
                 new_name = ''.join(name_parts) + ext
                 os.rename(os.path.join(folder_path, temp_name), os.path.join(folder_path, new_name))
 
-            messagebox.showinfo("成功", f"重命名了 {len(files)} 个文件。")
+            total_files = len(files)
+            renamed_files_count = len(temp_names)
+            dupe_files = total_files - renamed_files_count
+            messagebox.showinfo("成功", f"重命名了 {renamed_files_count} 个独特文件。{dupe_files} 个重复文件保持临时命名。")
             self.continue_button.config(state=tk.NORMAL)
         except Exception as e:
             messagebox.showerror("错误", str(e))
