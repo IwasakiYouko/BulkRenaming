@@ -1,0 +1,2 @@
+# requirements.txt (如果无依赖，可为空)
+pyinstaller==6.10.0  # 用于打包

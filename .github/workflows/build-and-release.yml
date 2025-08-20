@@ -1,0 +1,53 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # 触发于推送标签，如 v1.0.0
+
+jobs:
+  build:
+    runs-on: windows-latest  # 改为 windows-latest 以构建 Windows .exe
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'  # 匹配您的Python版本
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        if exist requirements.txt (pip install -r requirements.txt)
+
+    - name: Build executable with PyInstaller
+      run: pyinstaller --onefile --name bulk_rename main.py  # --onefile: 单文件打包；替换 main.py 为您的主文件
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}  # 如 v1.0.0
+        release_name: Release ${{ github.ref_name }}
+        draft: false
+        prerelease: false
+        body: |
+          Automated release for ${{ github.ref_name }}.
+          - Personal bulk renaming tool created with Grok.
+          - Packaged as executable for easy use.
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: dist\bulk_rename.exe  # Windows .exe 文件路径，使用反斜杠
+        asset_name: bulk_rename.exe  # 资产名称为 .exe
+        asset_content_type: application/octet-stream
