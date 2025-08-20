@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest  # 改为 windows-latest 以构建 Windows .exe
+    runs-on: windows-latest  # 保持不变；迁移后若有问题，可临时改成 windows-2022
 
     steps:
     - name: Checkout code
@@ -16,13 +16,13 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.12'  # 匹配您的Python版本
+        python-version: '3.12'  # 匹配当前runner的Python版本
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller
-        if exist requirements.txt (pip install -r requirements.txt)
+        if (Test-Path requirements.txt) { pip install -r requirements.txt }  # PowerShell语法：Test-Path 检查文件
 
     - name: Build executable with PyInstaller
       run: pyinstaller --onefile --name bulk_rename main.py  # --onefile: 单文件打包；替换 main.py 为您的主文件
